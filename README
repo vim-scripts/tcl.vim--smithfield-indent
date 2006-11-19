@@ -1,0 +1,9 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=1717
+
+This is a replacement for the tcl indent file that ships with vim. 
+
+Handles line continuations, nested braces and combination of the two. Skips over braces in comments. This should produce indented code that looks "as you'd expect".
+
+If you have any suggestions or bugs, please send them along. 
+
+Requires vimscript #1603.
