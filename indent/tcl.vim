@@ -35,6 +35,7 @@ endif
 let s:syng_strcom = '\<tcl\%(Quotes\|Comment\|SemiColon\|Special\|Todo\|Start\)\>'
 let s:skip_expr = "synIDattr(synID(line('.'),col('.'),0),'name') =~ '".s:syng_strcom."'"
 
+
 " returns 0/1 whether the cursor pos is in a string/comment syntax run or no.
 function s:IsInStringOrComment(lnum, col)
     let q = synIDattr(synID(a:lnum, a:col, 0), 'name') 
@@ -47,6 +48,7 @@ endfunction
 function s:GetOpenBrace(lnum)
     let openpos = s:rightmostChar(a:lnum, '{', -1)
     let closepos = s:rightmostChar(a:lnum, '}', -1)
+
     let sum = 0
 
     while openpos >= 0
@@ -77,6 +79,7 @@ endfunction
 function s:GetCloseBrace(lnum)
     let openpos = s:leftmostChar(a:lnum, '{', -1)
     let closepos = s:leftmostChar(a:lnum, '}', -1)
+
     let sum = 0
 
     while closepos >= 0
@@ -102,50 +105,93 @@ function s:GetCloseBrace(lnum)
     return -1
 endfunction
 
-" returns the pos of the leftmost valid occurance of ch
-" or -1 for no match
-function s:leftmostChar(lnum, ch, pos0)
-    let line = getline(a:lnum)
-    let pos1 = stridx(line, a:ch, a:pos0)
-    if pos1>=0
-        if s:IsInStringOrComment(a:lnum, pos1+1) == 1
-            let pos2 = pos1
-            let pos1 = -1
-            while pos2>=0 && s:IsInStringOrComment(a:lnum, pos2+1)
-                let pos2 = stridx(line, a:ch, pos2+1)
-            endwhile
-            if pos2>=0 
-                let pos1 = pos2
+if version < 700
+    " returns the pos of the leftmost valid occurance of ch
+    " or -1 for no match
+    function s:leftmostChar(lnum, ch, pos0)
+        let line = getline(a:lnum)
+        let pos1 = match(line, a:ch, a:pos0)
+        if pos1>=0
+            if s:IsInStringOrComment(a:lnum, pos1+1) == 1
+                let pos2 = pos1
+                let pos1 = -1
+                while pos2>=0 && s:IsInStringOrComment(a:lnum, pos2+1)
+                    let pos2 = match(line, a:ch, pos2+1)
+                endwhile
+                if pos2>=0 
+                    let pos1 = pos2
+                endif
             endif
         endif
-    endif
-    return pos1
-endfunction
+        return pos1
+    endfunction
 
-" returns the pos of the rightmost valid occurance of ch
-" or -1 for no match
-function s:rightmostChar(lnum, ch, pos0)
-    let line = getline(a:lnum)
-    if a:pos0 == -1
-        let pos = strlen(line)
-    else
-        let pos = a:pos0
-    endif
-    let pos1 = strridx(line, a:ch, pos)
-    if pos1>=0
-        if s:IsInStringOrComment(a:lnum, pos1+1) == 1
-            let pos2 = pos1
-            let pos1 = -1
-            while pos2>=0 && s:IsInStringOrComment(a:lnum, pos2+1)
-                let pos2 = strridx(line, a:ch, pos2-1)
-            endwhile
-            if pos2>=0
-                let pos1 = pos2
+    " returns the pos of the rightmost valid occurance of ch
+    " or -1 for no match
+    function s:rightmostChar(lnum, ch, pos0)
+        let line = getline(a:lnum)
+        if a:pos0 == -1
+            let posMax = strlen(line)
+        else
+            let posMax = a:pos0
+        endif
+        let pos1 = match(line, a:ch, 0)
+        let pos2 = -1
+        while pos1>=0 && pos1 < posMax
+            if !s:IsInStringOrComment(a:lnum, pos1+1)
+                let pos2 = pos1
+            endif
+            let pos1 = match(line, a:ch, pos1+1)
+        endwhile
+        return pos2
+    endfunction
+
+else
+    " returns the pos of the leftmost valid occurance of ch
+    " or -1 for no match
+    function s:leftmostChar(lnum, ch, pos0)
+        let line = getline(a:lnum)
+        let pos1 = stridx(line, a:ch, a:pos0)
+        if pos1>=0
+            if s:IsInStringOrComment(a:lnum, pos1+1) == 1
+                let pos2 = pos1
+                let pos1 = -1
+                while pos2>=0 && s:IsInStringOrComment(a:lnum, pos2+1)
+                    let pos2 = stridx(line, a:ch, pos2+1)
+                endwhile
+                if pos2>=0 
+                    let pos1 = pos2
+                endif
             endif
         endif
-    endif
-    return pos1
-endfunction
+        return pos1
+    endfunction
+
+    " returns the pos of the rightmost valid occurance of ch
+    " or -1 for no match
+    function s:rightmostChar(lnum, ch, pos0)
+        let line = getline(a:lnum)
+        if a:pos0 == -1
+            let pos = strlen(line)
+        else
+            let pos = a:pos0
+        endif
+        let pos1 = strridx(line, a:ch, pos)
+        if pos1>=0
+            if s:IsInStringOrComment(a:lnum, pos1+1) == 1
+                let pos2 = pos1
+                let pos1 = -1
+                while pos2>=0 && s:IsInStringOrComment(a:lnum, pos2+1)
+                    let pos2 = strridx(line, a:ch, pos2-1)
+                endwhile
+                if pos2>=0
+                    let pos1 = pos2
+                endif
+            endif
+        endif
+        return pos1
+    endfunction
+endif
 
 
 function s:HasLeadingStuff(lnu, pos)
@@ -294,7 +340,7 @@ function s:GetTclIndent(lnum0)
     let line = getline(vlnu)
     let ind1 = -1
     let flag = 0
-    
+
     " a line may have an 'open' open brace and an 'open' close brace
     let openbrace = s:GetOpenBrace(vlnu)
     let closebrace = s:GetCloseBrace(vlnu)
@@ -304,7 +350,7 @@ function s:GetTclIndent(lnum0)
         let ind = s:CloseBraceInd(vlnu, closebrace)
         let flag = 1
     endif
-    
+
     if flag == 1
         call cursor(vlnu, vcol)
         return ind
@@ -316,7 +362,7 @@ function s:GetTclIndent(lnum0)
 
     let flag = 0
     let prevlnum = prevnonblank(vlnu - 1)
-    
+
     " at the start? => indent = 0
     if prevlnum == 0
         return 0
