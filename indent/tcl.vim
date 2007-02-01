@@ -1,19 +1,15 @@
 " Vim indent file for Tcl/tk language
 " Language:	Tcl
 " Maintained:	SM Smithfield <m_smithfield@yahoo.com>
-" Last Change:	01/25/2007 (02:11:02)
+" Last Change:	02/01/2007 (06:35:02)
 " Filenames:    *.tcl
-" Version:      0.2
+" Version:      0.3
 " ------------------------------------------------------------------
 " GetLatestVimScripts: 1717 1 :AutoInstall: indent/tcl.vim
 " ------------------------------------------------------------------
 
-" -------------------------
-" Handles trailing comments, escaped braces, commented braces, lots of stuff
-" Faster than default (by alot)
-" TODO line-continuations -> deep indent
 
-" Only load this indent file when no other was loaded yet.
+" if there is another, bail
 if exists("b:did_indent")
   finish
 endif
@@ -36,11 +32,11 @@ endif
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 " regex -> syntax group names that are or delimit strings AND comments
-let s:syng_strcom = '\<tcl\%(Quotes\|Comment\|SemiColon\|Special\|Todo\)\>'
+let s:syng_strcom = '\<tcl\%(Quotes\|Comment\|SemiColon\|Special\|Todo\|Start\)\>'
 let s:skip_expr = "synIDattr(synID(line('.'),col('.'),0),'name') =~ '".s:syng_strcom."'"
 
 " returns 0/1 whether the cursor pos is in a string/comment syntax run or no.
-function! s:IsInStringOrComment(lnum, col)
+function s:IsInStringOrComment(lnum, col)
     let q = synIDattr(synID(a:lnum, a:col, 0), 'name') 
     let rv = (q =~ s:syng_strcom)
     return rv
@@ -48,7 +44,7 @@ endfunction
 
 " returns the position of the brace that opens the current line
 " or -1 for no match
-function! s:GetOpenBrace(lnum)
+function s:GetOpenBrace(lnum)
     let openpos = s:rightmostChar(a:lnum, '{', -1)
     let closepos = s:rightmostChar(a:lnum, '}', -1)
     let sum = 0
@@ -59,7 +55,7 @@ function! s:GetOpenBrace(lnum)
             if sum > 0
                 return openpos
             endif
-            let openpos = s:rightmostChar(a:lnum, '}', openpos-1)
+            let openpos = s:rightmostChar(a:lnum, '{', openpos-1)
         elseif openpos > closepos
             let sum = sum + 1
             if sum > 0
@@ -78,7 +74,7 @@ endfunction
 
 " returns the position of the brace that closes the current line
 " or -1 for no match
-function! s:GetCloseBrace(lnum)
+function s:GetCloseBrace(lnum)
     let openpos = s:leftmostChar(a:lnum, '{', -1)
     let closepos = s:leftmostChar(a:lnum, '}', -1)
     let sum = 0
@@ -108,7 +104,7 @@ endfunction
 
 " returns the pos of the leftmost valid occurance of ch
 " or -1 for no match
-function! s:leftmostChar(lnum, ch, pos0)
+function s:leftmostChar(lnum, ch, pos0)
     let line = getline(a:lnum)
     let pos1 = stridx(line, a:ch, a:pos0)
     if pos1>=0
@@ -128,7 +124,7 @@ endfunction
 
 " returns the pos of the rightmost valid occurance of ch
 " or -1 for no match
-function! s:rightmostChar(lnum, ch, pos0)
+function s:rightmostChar(lnum, ch, pos0)
     let line = getline(a:lnum)
     if a:pos0 == -1
         let pos = strlen(line)
@@ -151,7 +147,141 @@ function! s:rightmostChar(lnum, ch, pos0)
     return pos1
 endfunction
 
-function! s:GetTclIndent(lnum0)
+
+function s:HasLeadingStuff(lnu, pos)
+    let rv = 0
+    let line = getline(a:lnu)
+    let pos1 = matchend(line, '{\s*\S', a:pos)
+    if pos1 >= 0
+        let rv = !s:IsInStringOrComment(a:lnu,pos1)
+    endif
+    return rv
+endfunction
+
+
+function s:HasTrailingStuff(lnu, pos)
+    " find the first non-ws-char after matchopen, is NOT string/comment -> has stuff
+    let rv = 0
+    let line = getline(a:lnu)
+    let expr = '\S\s*\%'.(a:pos+1).'c}'
+    let pos1 = match(line, expr)
+    return (pos1 >= 0)
+endfunction
+
+function s:LineContinueIndent(lnu)
+    let ind = 0
+    if a:lnu > 1 
+        let pline = getline(a:lnu-1)
+        let line = getline(a:lnu)
+        if pline =~ '\\$'
+            if line !~ '\\$'
+                let ind = -&sw
+            endif
+        else
+            if line =~ '^\(#\)\@!.*\\$'
+                let ind = &sw
+            endif
+        endif
+    endif
+    return ind
+endfunction
+
+function s:CloseBracePriorIter(lnu,pos)
+    " what is the ind for a line that has this close brace previous?
+    " this function often depends on the previous open brace
+    let ind = -1
+    call cursor(a:lnu, a:pos+1) 
+    " seek the mate
+    let matchopenlnum = searchpair('{', '', '}', 'bW', s:skip_expr)
+    " does it have a mate
+    if  matchopenlnum >= 0
+        let closeopenpos = s:GetCloseBrace(matchopenlnum)
+        if closeopenpos >= 0
+            " " recurse
+            let ind = s:CloseBracePriorIter(matchopenlnum, closeopenpos)
+        else
+            let ind = indent(matchopenlnum)
+            " if matchopenlnum, is lc-bumped, then remove that bump
+            let pline = getline(matchopenlnum-1)
+            if pline =~ '\\$'
+                let ind = ind - &sw
+                let ind = ind - (ind % &sw)
+            endif
+        endif
+    endif
+    return ind
+endfunction
+
+function s:CloseBraceInd(lnu, pos)
+    let ind = -1
+    call cursor(a:lnu, a:pos+1) 
+    " seek the mate
+    let matchopenlnum = searchpair('{', '', '}', 'bW', s:skip_expr)
+    " does it have a mate
+    if  matchopenlnum >= 0
+        let matchopen = s:GetOpenBrace(matchopenlnum)
+        let matchopenline = getline(matchopenlnum)
+        let closeopenpos = s:GetCloseBrace(matchopenlnum)
+
+        if closeopenpos >= 0
+            " recurse
+            let ind = s:CloseBracePriorIter(matchopenlnum, closeopenpos)
+        else
+            let hasLeadingStuff = s:HasLeadingStuff(matchopenlnum, matchopen)
+            let hasTrailingStuff = s:HasTrailingStuff(a:lnu, a:pos)
+
+            if hasLeadingStuff && hasTrailingStuff
+                " seek to the first nonwhite and make a hanging indent
+                let ind = matchend(matchopenline, '{\s*', matchopen)
+            elseif hasTrailingStuff
+                " indent of openbrace PLUS shiftwidth
+                let ind = indent(matchopenlnum) + &sw
+            elseif hasLeadingStuff
+                " let ind = matchend(matchopenline, '{\s*', matchopen)
+                let ind = indent(matchopenlnum)
+            else
+                " indent of openbrace
+                let ind = indent(matchopenlnum)
+            endif
+
+            let pline = getline(matchopenlnum-1)
+            if pline =~ '\\$'
+                let ind = ind - &sw
+                let ind = ind - (ind % &sw)
+            endif
+        endif
+
+    endif
+    return ind
+endfunction
+
+function s:CloseBracePriorInd(lnu,pos)
+    " what is the ind for a line that has this close brace previous?
+    " this function often depends on the previous open brace
+    let ind = -1
+    call cursor(a:lnu, a:pos+1) 
+    " seek the mate
+    let matchopenlnum = searchpair('{', '', '}', 'bW', s:skip_expr)
+    " does it have a mate
+    if  matchopenlnum >= 0
+        let closeopenpos = s:GetCloseBrace(matchopenlnum)
+        if closeopenpos >= 0
+            " recurse
+            let ind = s:CloseBracePriorIter(matchopenlnum, closeopenpos)
+        else
+            let ind = indent(matchopenlnum)
+            " if matchopenlnum, is lc-bumped, then remove that bump
+            let pline = getline(matchopenlnum-1)
+            if pline =~ '\\$'
+                let ind = ind - &sw
+                let ind = ind - (ind % &sw)
+            endif
+        endif
+    endif
+    return ind
+endfunction
+
+function s:GetTclIndent(lnum0)
 
     " cursor-restore-position 
     let vcol = col('.')
@@ -171,53 +301,13 @@ function! s:GetTclIndent(lnum0)
 
     " does the line have an 'open' closebrace?
     if closebrace >= 0
-        " move the cursor one col inside the brace
-        call cursor(vlnu, closebrace+1) 
-        " seek the mate
-        let matchopenlnum = searchpair('{', '', '}', 'bW', s:skip_expr)
-        " does it have a mate
-        if  matchopenlnum >= 0
-            let matchopen = s:GetOpenBrace(matchopenlnum)
-            let matchopenline = getline(matchopenlnum)
-            if matchopen >= 0 
-                let leadHasStuff = 0
-                let trailHasStuff = 0
-                let pos1 = matchend(matchopenline, '{\s*\S', matchopen)
-                if pos1 >= 0
-                    let leadHasStuff = !s:IsInStringOrComment(matchopenlnum,pos1)
-                endif
-                " find the first non-ws-char after matchopen, is NOT string/comment -> has stuff
-                let expr = '\S\s*\%'.(closebrace+1).'c}'
-                let pos2 = match(line, expr)
-                if pos2 >= 0
-                    let trailHasStuff = !s:IsInStringOrComment(vlnu,pos2)
-                endif
-                " find the first non-ws-char before closebrace, is NOT string/comment? -> has stuff
-                if leadHasStuff && trailHasStuff
-                    let ind1 = matchend(matchopenline, '{\s*', matchopen)
-                elseif trailHasStuff
-                    let ind1 = indent(matchopenlnum) + &sw
-                elseif leadHasStuff
-                    let ind1 = matchend(matchopenline, '{\s*', matchopen)
-                    " there is some stuff on the line, seek to the first
-                    " nonwhite and make a hanging indent
-                else
-                    let ind1 = indent(matchopenlnum)
-                    " a comment? 
-                    " " or nothing?
-                endif
-            endif
-        endif
+        let ind = s:CloseBraceInd(vlnu, closebrace)
         let flag = 1
     endif
-
-    if openbrace >= 0
-        " there is ALSO an open brace:
-    endif
-
+    
     if flag == 1
         call cursor(vlnu, vcol)
-        return ind1
+        return ind
     endif
 
     " ---------
@@ -235,40 +325,37 @@ function! s:GetTclIndent(lnum0)
     let line = getline(prevlnum)
     let ind2 = indent(prevlnum)
 
-    " if there is an open brace
-    if line =~ '{'
-        let openbrace = s:GetOpenBrace(prevlnum)
-        if openbrace >= 0 
-            " does the line end in a comment? or nothing?
-            if s:IsInStringOrComment(prevlnum, strlen(line)) || line =~ '{\s*$'
-                let ind2 = ind2 + &sw
-                let flag = 1
-            else
-                let ind2 = matchend(line, '{\s*', openbrace)
-            endif
-        endif
-    endif
-
-    if flag == 1
-        call cursor(vlnu, vcol)
-        return ind2
-    endif
 
     if line =~ '}'
         " upto this point, the indent is simply inherited from prevlnum
         let closebrace = s:GetCloseBrace(prevlnum)
         if closebrace >= 0
-            " this line SHOULD have the same indent as the line that the
-            " previous block closes, which is what a closebrace would get
-            call cursor(prevlnum, closebrace+1) " move the cursor one col inside the brace
-            let openbracelnum = searchpair('{', '', '}', 'bW', s:skip_expr)
-            if  openbracelnum >= 0
-                let openbrace = s:GetOpenBrace(openbracelnum)
-                if openbrace >= 0 
-                    let ind2 = indent(openbracelnum)
-                endif
-            endif
+            let ind2 = s:CloseBracePriorInd(prevlnum, closebrace)
+            let flag = 1
         endif
+    endif
+
+
+    " if there is an open brace
+    if line =~ '{'
+        let openbrace = s:GetOpenBrace(prevlnum)
+        if openbrace >= 0 
+            " does the line end in a comment? or nothing?
+            if s:HasLeadingStuff(prevlnum, openbrace)
+                " LineContinueIndent
+                let ind3 = s:LineContinueIndent(prevlnum)
+                let ind2 = matchend(line, '{\s*', openbrace) + ind3
+            else
+                let ind2 = ind2 + &sw
+            endif
+            let flag = 1
+        endif
+    endif
+
+    if flag == 0
+        " if nothing else has changed the indentation, check for a
+        let ind3 = s:LineContinueIndent(prevlnum)
+        let ind2 = ind2 + ind3
     endif
 
     " restore the cursor to its original position
@@ -276,12 +363,12 @@ function! s:GetTclIndent(lnum0)
     return ind2
 endfunction
 
-function! GetTclIndent()
+function GetTclIndent()
     let l:val = s:GetTclIndent(v:lnum)
     return l:val
 endfunction
 
-function! Gpeek()
+function Gpeek()
     let lnu = line('.')
     let val = s:GetTclIndent(lnu)
     let openbrace = s:GetOpenBrace(lnu)
