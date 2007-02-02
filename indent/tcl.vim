@@ -3,11 +3,10 @@
 " Maintained:	SM Smithfield <m_smithfield@yahoo.com>
 " Last Change:	02/01/2007 (06:35:02)
 " Filenames:    *.tcl
-" Version:      0.3
+" Version:      0.3.3
 " ------------------------------------------------------------------
 " GetLatestVimScripts: 1717 1 :AutoInstall: indent/tcl.vim
 " ------------------------------------------------------------------
-
 
 " if there is another, bail
 if exists("b:did_indent")
@@ -31,16 +30,31 @@ endif
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-" regex -> syntax group names that are or delimit strings AND comments
+" syntax groups that should not be touched by the indent process
+let s:syng_com = '\<tcl\%(Comment\|Todo\|Start\)\>'
+" syntax groups that should be ignored by the indent process
 let s:syng_strcom = '\<tcl\%(Quotes\|Comment\|SemiColon\|Special\|Todo\|Start\)\>'
+" regexp that facilitates finding the correct mate to a brace, skipping comments, strings and such
 let s:skip_expr = "synIDattr(synID(line('.'),col('.'),0),'name') =~ '".s:syng_strcom."'"
 
+function s:IsComment(lnum)
+    let pos = 0
+    " try to find a solid char
+    let line = getline(a:lnum)
+    let pos1 = matchend(line, '^\s*\S', 0)
+    if pos1 > 0
+        let pos = pos1
+    endif
+    let q = synIDattr(synID(a:lnum, pos, 0), 'name')
+    let retval = (q =~ s:syng_com)
+    return retval
+endfunction
 
 " returns 0/1 whether the cursor pos is in a string/comment syntax run or no.
 function s:IsInStringOrComment(lnum, col)
     let q = synIDattr(synID(a:lnum, a:col, 0), 'name') 
-    let rv = (q =~ s:syng_strcom)
-    return rv
+    let retval = (q =~ s:syng_strcom)
+    return retval
 endfunction
 
 " returns the position of the brace that opens the current line
@@ -217,14 +231,19 @@ endfunction
 function s:LineContinueIndent(lnu)
     let ind = 0
     if a:lnu > 1 
+        " echo "lc-0"
         let pline = getline(a:lnu-1)
         let line = getline(a:lnu)
         if pline =~ '\\$'
+            " echo "lc-1"
             if line !~ '\\$'
+                " echo "lc-2"
                 let ind = -&sw
             endif
         else
+            " echo "lc-3"
             if line =~ '^\(#\)\@!.*\\$'
+                " echo "lc-4"
                 let ind = &sw
             endif
         endif
@@ -341,12 +360,18 @@ function s:GetTclIndent(lnum0)
     let ind1 = -1
     let flag = 0
 
+    " is the current line a comment? -> leave it alone completely
+    if s:IsComment(vlnu)
+        return -1
+    endif
+
     " a line may have an 'open' open brace and an 'open' close brace
     let openbrace = s:GetOpenBrace(vlnu)
     let closebrace = s:GetCloseBrace(vlnu)
 
     " does the line have an 'open' closebrace?
     if closebrace >= 0
+        " echo "cur-0"
         let ind = s:CloseBraceInd(vlnu, closebrace)
         let flag = 1
     endif
@@ -373,9 +398,11 @@ function s:GetTclIndent(lnum0)
 
 
     if line =~ '}'
+        " echo "prev-cb-0"
         " upto this point, the indent is simply inherited from prevlnum
         let closebrace = s:GetCloseBrace(prevlnum)
         if closebrace >= 0
+            " echo "prev-cb-1"
             let ind2 = s:CloseBracePriorInd(prevlnum, closebrace)
             let flag = 1
         endif
@@ -384,14 +411,18 @@ function s:GetTclIndent(lnum0)
 
     " if there is an open brace
     if line =~ '{'
+        " echo "prev-ob-0"
         let openbrace = s:GetOpenBrace(prevlnum)
         if openbrace >= 0 
+            " echo "prev-ob-1"
             " does the line end in a comment? or nothing?
             if s:HasLeadingStuff(prevlnum, openbrace)
+                " echo "prev-ob-2"
                 " LineContinueIndent
                 let ind3 = s:LineContinueIndent(prevlnum)
                 let ind2 = matchend(line, '{\s*', openbrace) + ind3
             else
+                " echo "prev-ob-4"
                 let ind2 = ind2 + &sw
             endif
             let flag = 1
@@ -399,9 +430,11 @@ function s:GetTclIndent(lnum0)
     endif
 
     if flag == 0
+        " echo "prev-lc-0"
         " if nothing else has changed the indentation, check for a
         let ind3 = s:LineContinueIndent(prevlnum)
         let ind2 = ind2 + ind3
+        " echo "prev-lc- " ind2 ind3
     endif
 
     " restore the cursor to its original position
