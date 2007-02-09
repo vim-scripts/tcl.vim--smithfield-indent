@@ -1,9 +1,9 @@
 " Vim indent file for Tcl/tk language
 " Language:	Tcl
 " Maintained:	SM Smithfield <m_smithfield@yahoo.com>
-" Last Change:	02/01/2007 (06:35:02)
+" Last Change:	02/08/2007 (06:35:02)
 " Filenames:    *.tcl
-" Version:      0.3.3
+" Version:      0.3.5
 " ------------------------------------------------------------------
 " GetLatestVimScripts: 1717 1 :AutoInstall: indent/tcl.vim
 " ------------------------------------------------------------------
@@ -31,9 +31,9 @@ endif
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 " syntax groups that should not be touched by the indent process
-let s:syng_com = '\<tcl\%(Comment\|Todo\|Start\)\>'
+let s:syng_com = '\<tcl\%(Comment\|CommentBraces\|Todo\|Start\)\>'
 " syntax groups that should be ignored by the indent process
-let s:syng_strcom = '\<tcl\%(Quotes\|Comment\|SemiColon\|Special\|Todo\|Start\)\>'
+let s:syng_strcom = '\<tcl\%(Quotes\|Comment\|CommentBraces\|SemiColon\|Special\|Todo\|Start\)\>'
 " regexp that facilitates finding the correct mate to a brace, skipping comments, strings and such
 let s:skip_expr = "synIDattr(synID(line('.'),col('.'),0),'name') =~ '".s:syng_strcom."'"
 
@@ -46,8 +46,7 @@ function s:IsComment(lnum)
         let pos = pos1
     endif
     let q = synIDattr(synID(a:lnum, pos, 0), 'name')
-    let retval = (q =~ s:syng_com)
-    return retval
+    return (q =~ s:syng_com)
 endfunction
 
 " returns 0/1 whether the cursor pos is in a string/comment syntax run or no.
@@ -57,69 +56,10 @@ function s:IsInStringOrComment(lnum, col)
     return retval
 endfunction
 
-" returns the position of the brace that opens the current line
-" or -1 for no match
-function s:GetOpenBrace(lnum)
-    let openpos = s:rightmostChar(a:lnum, '{', -1)
-    let closepos = s:rightmostChar(a:lnum, '}', -1)
-
-    let sum = 0
-
-    while openpos >= 0
-        if closepos < 0
-            let sum = sum + 1
-            if sum > 0
-                return openpos
-            endif
-            let openpos = s:rightmostChar(a:lnum, '{', openpos-1)
-        elseif openpos > closepos
-            let sum = sum + 1
-            if sum > 0
-                return openpos
-            endif
-            let closepos = s:rightmostChar(a:lnum, '}', openpos-1)
-            let openpos = s:rightmostChar(a:lnum, '{', openpos-1)
-        else
-            let sum = sum - 1
-            let openpos = s:rightmostChar(a:lnum, '{', closepos-1)
-            let closepos = s:rightmostChar(a:lnum, '}', closepos-1)
-        endif
-    endwhile
-    return -1
-endfunction
-
-" returns the position of the brace that closes the current line
-" or -1 for no match
-function s:GetCloseBrace(lnum)
-    let openpos = s:leftmostChar(a:lnum, '{', -1)
-    let closepos = s:leftmostChar(a:lnum, '}', -1)
-
-    let sum = 0
-
-    while closepos >= 0
-        if openpos < 0
-            let sum = sum + 1
-            if sum > 0
-                return closepos
-            endif
-            let closepos = s:leftmostChar(a:lnum, '}', closepos+1)
-        elseif closepos < openpos
-            let sum = sum + 1
-            if sum > 0
-                return closepos
-            endif
-            let openpos = s:leftmostChar(a:lnum, '{', closepos+1)
-            let closepos = s:leftmostChar(a:lnum, '}', closepos+1)
-        else
-            let sum = sum - 1
-            let closepos = s:leftmostChar(a:lnum, '}', openpos+1)
-            let openpos = s:leftmostChar(a:lnum, '{', openpos+1)
-        endif
-    endwhile
-    return -1
-endfunction
-
 if version < 700
+    " for the purpose of the following tests, valid means that the character is
+    " not in a string/comment or other *bad* syntax run.
+
     " returns the pos of the leftmost valid occurance of ch
     " or -1 for no match
     function s:leftmostChar(lnum, ch, pos0)
@@ -208,6 +148,68 @@ else
 endif
 
 
+" returns the position of the brace that opens the current line
+" or -1 for no match
+function s:GetOpenBrace(lnum)
+    let openpos = s:rightmostChar(a:lnum, '{', -1)
+    let closepos = s:rightmostChar(a:lnum, '}', -1)
+
+    let sum = 0
+
+    while openpos >= 0
+        if closepos < 0
+            let sum = sum + 1
+            if sum > 0
+                return openpos
+            endif
+            let openpos = s:rightmostChar(a:lnum, '{', openpos-1)
+        elseif openpos > closepos
+            let sum = sum + 1
+            if sum > 0
+                return openpos
+            endif
+            let closepos = s:rightmostChar(a:lnum, '}', openpos-1)
+            let openpos = s:rightmostChar(a:lnum, '{', openpos-1)
+        else
+            let sum = sum - 1
+            let openpos = s:rightmostChar(a:lnum, '{', closepos-1)
+            let closepos = s:rightmostChar(a:lnum, '}', closepos-1)
+        endif
+    endwhile
+    return -1
+endfunction
+
+" returns the position of the brace that closes the current line
+" or -1 for no match
+function s:GetCloseBrace(lnum)
+    let openpos = s:leftmostChar(a:lnum, '{', -1)
+    let closepos = s:leftmostChar(a:lnum, '}', -1)
+
+    let sum = 0
+
+    while closepos >= 0
+        if openpos < 0
+            let sum = sum + 1
+            if sum > 0
+                return closepos
+            endif
+            let closepos = s:leftmostChar(a:lnum, '}', closepos+1)
+        elseif closepos < openpos
+            let sum = sum + 1
+            if sum > 0
+                return closepos
+            endif
+            let openpos = s:leftmostChar(a:lnum, '{', closepos+1)
+            let closepos = s:leftmostChar(a:lnum, '}', closepos+1)
+        else
+            let sum = sum - 1
+            let closepos = s:leftmostChar(a:lnum, '}', openpos+1)
+            let openpos = s:leftmostChar(a:lnum, '{', openpos+1)
+        endif
+    endwhile
+    return -1
+endfunction
+
 function s:HasLeadingStuff(lnu, pos)
     let rv = 0
     let line = getline(a:lnu)
@@ -229,26 +231,30 @@ function s:HasTrailingStuff(lnu, pos)
 endfunction
 
 function s:LineContinueIndent(lnu)
-    let ind = 0
+    " returns a relative indent offset
+    let delt_ind = 0
     if a:lnu > 1 
         " echo "lc-0"
         let pline = getline(a:lnu-1)
         let line = getline(a:lnu)
-        if pline =~ '\\$'
-            " echo "lc-1"
-            if line !~ '\\$'
+        if !s:IsComment(a:lnu) 
+            " echo "lc-1" line_is_comment pline_is_comment
+            if pline =~ '\\$'
                 " echo "lc-2"
-                let ind = -&sw
-            endif
-        else
-            " echo "lc-3"
-            if line =~ '^\(#\)\@!.*\\$'
+                if line !~ '\\$'
+                    " echo "lc-3"
+                    let delt_ind = -&sw
+                endif
+            else
                 " echo "lc-4"
-                let ind = &sw
+                if line =~ '^\(#\)\@!.*\\$'
+                    " echo "lc-5"
+                    let delt_ind = &sw
+                endif
             endif
         endif
     endif
-    return ind
+    return delt_ind
 endfunction
 
 function s:CloseBracePriorIter(lnu,pos)
@@ -262,7 +268,7 @@ function s:CloseBracePriorIter(lnu,pos)
     if  matchopenlnum >= 0
         let closeopenpos = s:GetCloseBrace(matchopenlnum)
         if closeopenpos >= 0
-            " " recurse
+            " recurse
             let ind = s:CloseBracePriorIter(matchopenlnum, closeopenpos)
         else
             let ind = indent(matchopenlnum)
@@ -346,6 +352,17 @@ function s:CloseBracePriorInd(lnu,pos)
     return ind
 endfunction
 
+function s:PrevLine(lnu)
+    " for my purposes, the previous line is
+    " the previous non-blank line that is NOT a comment (nor string?)
+    " 0 ==> top of file
+    let plnu = prevnonblank(a:lnu-1)
+    while plnu > 0 && s:IsComment(plnu)
+        let plnu = prevnonblank(plnu-1)
+    endwhile
+    return plnu
+endfunction
+
 function s:GetTclIndent(lnum0)
 
     " cursor-restore-position 
@@ -386,7 +403,8 @@ function s:GetTclIndent(lnum0)
     " ---------
 
     let flag = 0
-    let prevlnum = prevnonblank(vlnu - 1)
+    " let prevlnum = prevnonblank(vlnu - 1)
+    let prevlnum = s:PrevLine(vlnu)
 
     " at the start? => indent = 0
     if prevlnum == 0
@@ -419,8 +437,8 @@ function s:GetTclIndent(lnum0)
             if s:HasLeadingStuff(prevlnum, openbrace)
                 " echo "prev-ob-2"
                 " LineContinueIndent
-                let ind3 = s:LineContinueIndent(prevlnum)
-                let ind2 = matchend(line, '{\s*', openbrace) + ind3
+                let delt_ind = s:LineContinueIndent(prevlnum)
+                let ind2 = matchend(line, '{\s*', openbrace) + delt_ind
             else
                 " echo "prev-ob-4"
                 let ind2 = ind2 + &sw
@@ -432,9 +450,9 @@ function s:GetTclIndent(lnum0)
     if flag == 0
         " echo "prev-lc-0"
         " if nothing else has changed the indentation, check for a
-        let ind3 = s:LineContinueIndent(prevlnum)
-        let ind2 = ind2 + ind3
-        " echo "prev-lc- " ind2 ind3
+        let delt_ind = s:LineContinueIndent(prevlnum)
+        let ind2 = ind2 + delt_ind
+        " echo "prev-lc- " ind2 delt_ind
     endif
 
     " restore the cursor to its original position
@@ -452,5 +470,7 @@ function Gpeek()
     let val = s:GetTclIndent(lnu)
     let openbrace = s:GetOpenBrace(lnu)
     let closebrace = s:GetCloseBrace(lnu)
-    echo "ind>" val ": (" openbrace closebrace ")"
+    let iscomment = s:IsComment(lnu)
+    let prevlnum = s:PrevLine(lnu)
+    echo "ind>" val ": (" openbrace closebrace ") : " prevlnum
 endfunction
