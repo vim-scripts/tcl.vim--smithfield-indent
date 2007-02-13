@@ -3,7 +3,7 @@
 " Maintained:	SM Smithfield <m_smithfield@yahoo.com>
 " Last Change:	02/08/2007 (06:35:02)
 " Filenames:    *.tcl
-" Version:      0.3.5
+" Version:      0.3.6
 " ------------------------------------------------------------------
 " GetLatestVimScripts: 1717 1 :AutoInstall: indent/tcl.vim
 " ------------------------------------------------------------------
@@ -377,10 +377,6 @@ function s:GetTclIndent(lnum0)
     let ind1 = -1
     let flag = 0
 
-    " is the current line a comment? -> leave it alone completely
-    if s:IsComment(vlnu)
-        return -1
-    endif
 
     " a line may have an 'open' open brace and an 'open' close brace
     let openbrace = s:GetOpenBrace(vlnu)
@@ -405,14 +401,20 @@ function s:GetTclIndent(lnum0)
     let flag = 0
     " let prevlnum = prevnonblank(vlnu - 1)
     let prevlnum = s:PrevLine(vlnu)
+    let line = getline(prevlnum)
+    let ind2 = indent(prevlnum)
 
     " at the start? => indent = 0
     if prevlnum == 0
         return 0
     endif
 
-    let line = getline(prevlnum)
-    let ind2 = indent(prevlnum)
+    " is the current line a comment? => simple use the prevline
+    if s:IsComment(vlnu)
+        let prevlnum = prevnonblank(vlnu-1)
+        let ind2 = indent(prevlnum)
+        return ind2
+    endif
 
 
     if line =~ '}'
